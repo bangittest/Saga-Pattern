@@ -1,0 +1,20 @@
+# Build output (services are built inside Docker; no local Maven target expected)
+target/
+out/
+build/
+*.class
+*.jar
+!**/.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Claude Code session files
+.claude/
+
+# OS / logs
+.DS_Store
+Thumbs.db
+*.log

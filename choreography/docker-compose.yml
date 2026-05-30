@@ -1,0 +1,80 @@
+# Choreography-style Saga demo (event-driven via Kafka, NO central orchestrator).
+# Host ports are offset (809x / 5434) so this can run alongside the orchestration stack.
+# Run: docker compose up --build
+services:
+
+  kafka:
+    image: apache/kafka:3.8.0
+    environment:
+      # --- single-node KRaft (no Zookeeper) ---
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092   # how other containers reach the broker
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  order-service:
+    build: ./order-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/orderdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      KAFKA: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    ports:
+      - "8091:8081"
+
+  payment-service:
+    build: ./payment-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/paymentdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      KAFKA: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    ports:
+      - "8092:8082"
+
+  inventory-service:
+    build: ./inventory-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/inventorydb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      KAFKA: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    ports:
+      - "8093:8083"

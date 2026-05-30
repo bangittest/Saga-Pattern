@@ -1,0 +1,11 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: auth-service
+
+jwt:
+  access-ttl-seconds: 300       # 5 min — short-lived access token
+  refresh-ttl-seconds: 604800   # 7 days — long-lived refresh token
+  # No shared secret anymore: RS256 keys are generated in-process (see JwtKeys).

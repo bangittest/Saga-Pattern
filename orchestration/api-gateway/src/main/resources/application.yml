@@ -1,0 +1,51 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # Public — used to obtain a JWT (no token required, see AuthGatewayFilter).
+        - id: auth-service
+          uri: ${AUTH_URL:http://localhost:8085}
+          predicates:
+            - Path=/auth/**
+        # Single public door (port 8000) -> internal services. StripPrefix=1 removes
+        # the first path segment, e.g. /orchestrator/orders -> orchestrator-service/orders
+        - id: orchestrator
+          uri: ${ORCHESTRATOR_URL:http://localhost:8080}
+          predicates:
+            - Path=/orchestrator/**
+          filters:
+            - StripPrefix=1
+        - id: order-service
+          uri: ${ORDER_URL:http://localhost:8081}
+          predicates:
+            - Path=/order-service/**
+          filters:
+            - StripPrefix=1
+        - id: payment-service
+          uri: ${PAYMENT_URL:http://localhost:8082}
+          predicates:
+            - Path=/payment-service/**
+          filters:
+            - StripPrefix=1
+        - id: inventory-service
+          uri: ${INVENTORY_URL:http://localhost:8083}
+          predicates:
+            - Path=/inventory-service/**
+          filters:
+            - StripPrefix=1
+
+# RS256: the gateway fetches the PUBLIC key from auth-service (see PublicKeyProvider).
+# AUTH_URL is set via env in docker-compose; defaults to localhost for local runs.
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
