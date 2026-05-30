@@ -62,3 +62,13 @@ spec:
   ports:
     - port: 5432
       targetPort: 5432
+
+
+#  kubectl apply -f 10-postgres.yaml
+#  kubectl apply -f 20-zipkin.yaml
+#  kubectl apply -f 30-order-service.yaml
+#  kubectl apply -f 31-payment-service.yaml
+#  kubectl apply -f 32-inventory-service.yaml
+#  kubectl apply -f 33-orchestrator-service.yaml
+#  kubectl apply -f 34-auth-service.yaml
+#  kubectl apply -f 40-api-gateway.yaml

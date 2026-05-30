@@ -1,0 +1,105 @@
+pipeline {
+    agent any
+
+    environment {
+        SERVICE_DIR = "order-service"
+
+        IMAGE_NAME = "orchestration-order-service"
+
+        NAMESPACE = "saga"
+        DEPLOYMENT_NAME = "order-service"
+        CONTAINER_NAME = "order-service"
+
+        K8S_NODE = "desktop-control-plane"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                deleteDir()
+
+                git branch: 'main',
+                    url: 'https://github.com/bangittest/Saga-Pattern.git'
+
+                sh 'git log -1'
+            }
+        }
+
+        stage('Prepare Image Tag') {
+            steps {
+                script {
+                    def shortCommit = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_TAG = "main-${env.BUILD_NUMBER}-${shortCommit}"
+                    env.FULL_IMAGE = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+                    env.IMAGE_TAR = "${env.IMAGE_NAME}-${env.IMAGE_TAG}.tar"
+
+                    echo "Image tag: ${env.FULL_IMAGE}"
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir("${SERVICE_DIR}") {
+                    sh '''
+                        docker build -t $FULL_IMAGE .
+                    '''
+                }
+            }
+        }
+
+        stage('Push Image To K8s Node') {
+            steps {
+                sh '''
+                    rm -f $IMAGE_TAR
+
+                    docker save -o $IMAGE_TAR $FULL_IMAGE
+
+                    docker exec $K8S_NODE mkdir -p /var/tmp/images
+
+                    docker cp $IMAGE_TAR $K8S_NODE:/var/tmp/images/$IMAGE_TAR
+
+                    docker exec $K8S_NODE ctr -n k8s.io images import /var/tmp/images/$IMAGE_TAR
+
+                    docker exec $K8S_NODE crictl images | grep $IMAGE_NAME || true
+                '''
+            }
+        }
+
+        stage('Deploy To Kubernetes') {
+            steps {
+                sh '''
+                    kubectl set image deployment/$DEPLOYMENT_NAME \
+                      $CONTAINER_NAME=$FULL_IMAGE \
+                      -n $NAMESPACE
+
+                    kubectl rollout status deployment/$DEPLOYMENT_NAME \
+                      -n $NAMESPACE \
+                      --timeout=180s
+                '''
+            }
+        }
+    }
+
+    post {
+        failure {
+            sh '''
+                echo "Build or rollout failed. Rollback previous version..."
+                kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $NAMESPACE || true
+            '''
+        }
+
+        success {
+            sh '''
+                echo "Deploy success!"
+                kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME
+                kubectl rollout history deployment/$DEPLOYMENT_NAME -n $NAMESPACE
+            '''
+        }
+    }
+}
