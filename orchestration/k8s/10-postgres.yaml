@@ -1,0 +1,64 @@
+# Postgres with the three logical databases (one per service).
+# Data uses emptyDir -> ephemeral (fine for a demo; use a PVC/StatefulSet in production).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: saga
+data:
+  init.sql: |
+    CREATE DATABASE orderdb;
+    CREATE DATABASE paymentdb;
+    CREATE DATABASE inventorydb;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: saga
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - { name: POSTGRES_USER, value: postgres }
+            - { name: POSTGRES_PASSWORD, value: postgres }
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: saga
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
