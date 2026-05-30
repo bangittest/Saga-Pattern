@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SERVICE_DIR = "order-service"
+        SERVICE_DIR = "orchestration/order-service"
 
         IMAGE_NAME = "orchestration-order-service"
 
@@ -23,6 +23,8 @@ pipeline {
                     url: 'https://github.com/bangittest/Saga-Pattern.git'
 
                 sh 'git log -1'
+                sh 'pwd && ls -la'
+                sh 'find . -maxdepth 4 -name Dockerfile -print'
             }
         }
 
@@ -47,6 +49,8 @@ pipeline {
             steps {
                 dir("${SERVICE_DIR}") {
                     sh '''
+                        pwd
+                        ls -la
                         docker build -t $FULL_IMAGE .
                     '''
                 }
@@ -89,7 +93,7 @@ pipeline {
     post {
         failure {
             sh '''
-                echo "Build or rollout failed. Rollback previous version..."
+                echo "Build or rollout failed. Try rollback..."
                 kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $NAMESPACE || true
             '''
         }
