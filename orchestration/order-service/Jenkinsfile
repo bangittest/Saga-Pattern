@@ -183,7 +183,7 @@ pipeline {
 
                     kubectl rollout status deployment/$DEPLOYMENT_NAME \
                       -n $NAMESPACE \
-                      --timeout=180s
+                      --timeout=300s
                 '''
             }
         }
