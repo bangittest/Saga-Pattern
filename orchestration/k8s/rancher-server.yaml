@@ -1,0 +1,213 @@
+## Rancher Server chạy như một Deployment trên cụm k8s hiện có, ví dụ docker-desktop.
+## Khi chạy trong Kubernetes Pod, Rancher sẽ chạy theo chế độ dùng API Server của cluster hiện tại.
+## Vì vậy Rancher cần ServiceAccount có quyền cluster-admin.
+##
+## Apply:   kubectl apply -f rancher-server.yaml
+## HTTP:    http://localhost:30800
+## HTTPS:   https://localhost:30443   self-signed cert -> bấm bỏ qua cảnh báo
+## Login:   user 'admin', mật khẩu bootstrap = admin12345  đổi sau khi vào
+#---
+#apiVersion: v1
+#kind: Namespace
+#metadata:
+#  name: cattle-system
+#
+#---
+#apiVersion: v1
+#kind: ServiceAccount
+#metadata:
+#  name: rancher
+#  namespace: cattle-system
+#
+#---
+#apiVersion: rbac.authorization.k8s.io/v1
+#kind: ClusterRoleBinding
+#metadata:
+#  name: rancher-cluster-admin
+#roleRef:
+#  apiGroup: rbac.authorization.k8s.io
+#  kind: ClusterRole
+#  name: cluster-admin
+#subjects:
+#  - kind: ServiceAccount
+#    name: rancher
+#    namespace: cattle-system
+#
+#---
+## Lưu /var/lib/rancher để dữ liệu sống qua restart pod.
+## Docker Desktop thường có sẵn StorageClass hostpath.
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: rancher-data
+#  namespace: cattle-system
+#spec:
+#  accessModes:
+#    - ReadWriteOnce
+#  resources:
+#    requests:
+#      storage: 2Gi
+#
+#---
+#apiVersion: apps/v1
+#kind: Deployment
+#metadata:
+#  name: rancher
+#  namespace: cattle-system
+#  labels:
+#    app: rancher
+#spec:
+#  replicas: 1
+#  strategy:
+#    type: Recreate
+#  selector:
+#    matchLabels:
+#      app: rancher
+#  template:
+#    metadata:
+#      labels:
+#        app: rancher
+#    spec:
+#      serviceAccountName: rancher
+#      containers:
+#        - name: rancher
+#          image: rancher/rancher:v2.14.2
+#          imagePullPolicy: IfNotPresent
+#
+#          securityContext:
+#            privileged: true
+#
+#          args:
+#            - "--http-listen-port=80"
+#            - "--https-listen-port=443"
+#            - "--add-local=true"
+#
+#          env:
+#            - name: CATTLE_BOOTSTRAP_PASSWORD
+#              value: admin12345
+#
+#            # Namespace Rancher đang chạy.
+#            - name: CATTLE_NAMESPACE
+#              value: cattle-system
+#
+#            # Service chính để Rancher peer/discovery.
+#            - name: CATTLE_PEER_SERVICE
+#              value: rancher
+#
+#            # URL chính của Rancher.
+#            # Nên để HTTPS để UI, websocket, token và agent registration ổn định.
+#            - name: CATTLE_SERVER_URL
+#              value: https://localhost:30443
+#
+#            # Cấu hình giống chart Rancher mới để imperative API hoạt động ổn định hơn.
+#            - name: IMPERATIVE_API_DIRECT
+#              value: "true"
+#
+#            - name: IMPERATIVE_API_APP_SELECTOR
+#              value: rancher
+#
+#          ports:
+#            - name: http
+#              containerPort: 80
+#              protocol: TCP
+#
+#            - name: https
+#              containerPort: 443
+#              protocol: TCP
+#
+#            # Port nội bộ Rancher dùng cho rancher-internal service.
+#            - name: https-internal
+#              containerPort: 444
+#              protocol: TCP
+#
+#            # Port nội bộ phụ trợ của Rancher.
+#            - name: remotedialer
+#              containerPort: 6666
+#              protocol: TCP
+#
+#          volumeMounts:
+#            - name: data
+#              mountPath: /var/lib/rancher
+#
+#          resources:
+#            requests:
+#              cpu: "500m"
+#              memory: "1Gi"
+#            limits:
+#              cpu: "2"
+#              memory: "3Gi"
+#
+#          startupProbe:
+#            httpGet:
+#              path: /healthz
+#              port: 80
+#              scheme: HTTP
+#            periodSeconds: 10
+#            failureThreshold: 60
+#
+#          livenessProbe:
+#            httpGet:
+#              path: /healthz
+#              port: 80
+#              scheme: HTTP
+#            periodSeconds: 30
+#            failureThreshold: 5
+#
+#          readinessProbe:
+#            httpGet:
+#              path: /healthz
+#              port: 80
+#              scheme: HTTP
+#            periodSeconds: 10
+#            failureThreshold: 3
+#
+#      volumes:
+#        - name: data
+#          persistentVolumeClaim:
+#            claimName: rancher-data
+#
+#---
+## Service ngoài: mở cả HTTP và HTTPS ra localhost qua NodePort.
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  name: rancher
+#  namespace: cattle-system
+#spec:
+#  type: NodePort
+#  selector:
+#    app: rancher
+#  ports:
+#    # Cổng HTTPS chính để vào Rancher UI.
+#    - name: https
+#      protocol: TCP
+#      port: 443
+#      targetPort: 443
+#      nodePort: 30443
+#
+#    # Cổng HTTP phụ, thường sẽ redirect sang HTTPS.
+#    - name: http
+#      protocol: TCP
+#      port: 80
+#      targetPort: 80
+#      nodePort: 30800
+#
+#---
+## Service nội bộ bắt buộc cho Rancher v2.14.
+## Rancher cần service này để xử lý APIService / imperative API.
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  name: rancher-internal
+#  namespace: cattle-system
+#  labels:
+#    app: rancher
+#spec:
+#  type: ClusterIP
+#  selector:
+#    app: rancher
+#  ports:
+#    - name: https-internal
+#      protocol: TCP
+#      port: 443
+#      targetPort: 444

@@ -1,0 +1,85 @@
+services:
+  rancher:
+    image: rancher/rancher:v2.14.2
+    container_name: rancher
+    privileged: true
+    restart: unless-stopped
+
+    ports:
+      - "30443:443"
+      - "30800:80"
+
+    environment:
+      CATTLE_BOOTSTRAP_PASSWORD: admin12345
+      CATTLE_SERVER_URL: https://192.168.0.100:30443
+
+    volumes:
+      - rancher-data:/var/lib/rancher
+
+  local-registry:
+    image: registry:2
+    container_name: local-registry
+    restart: always
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      - registry-data:/var/lib/registry
+
+    networks:
+      - default
+      - kind-net
+
+  registry-configurator:
+    image: docker:27-cli
+    container_name: registry-configurator
+    restart: "no"
+
+    depends_on:
+      - local-registry
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    command:
+      - sh
+      - -c
+      - |
+        echo "Waiting for desktop-control-plane..."
+        until docker inspect desktop-control-plane >/dev/null 2>&1; do
+          sleep 2
+        done
+
+        echo "Configure local-registry:5000 for containerd..."
+        docker exec -i desktop-control-plane sh -c 'mkdir -p /etc/containerd/certs.d/local-registry:5000 && cat > /etc/containerd/certs.d/local-registry:5000/hosts.toml' <<'EOF'
+        server = "http://local-registry:5000"
+
+        [host."http://local-registry:5000"]
+          capabilities = ["pull", "resolve", "push"]
+          skip_verify = true
+        EOF
+
+        echo "Configure 192.168.0.100:5000 for containerd..."
+        docker exec -i desktop-control-plane sh -c 'mkdir -p /etc/containerd/certs.d/192.168.0.100:5000 && cat > /etc/containerd/certs.d/192.168.0.100:5000/hosts.toml' <<'EOF'
+        server = "http://192.168.0.100:5000"
+
+        [host."http://192.168.0.100:5000"]
+          capabilities = ["pull", "resolve", "push"]
+          skip_verify = true
+        EOF
+
+        echo "Restart containerd..."
+        docker exec desktop-control-plane systemctl restart containerd || docker restart desktop-control-plane
+
+        echo "Registry configuration done."
+
+volumes:
+  rancher-data:
+  registry-data:
+
+networks:
+  default:
+  kind-net:
+    external: true
+    name: kind
