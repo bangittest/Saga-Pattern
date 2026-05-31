@@ -89,10 +89,22 @@ pipeline {
                     echo "Check deployment:"
                     kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide
 
+                    echo "Check current image:"
+                    kubectl get deployment $DEPLOYMENT_NAME \
+                      -n $NAMESPACE \
+                      -o jsonpath="{.spec.template.spec.containers[0].image}"
+
+                    echo ""
                     echo "Check current imagePullPolicy:"
                     kubectl get deployment $DEPLOYMENT_NAME \
                       -n $NAMESPACE \
                       -o jsonpath="{.spec.template.spec.containers[0].imagePullPolicy}"
+
+                    echo ""
+                    echo "Check rollout strategy:"
+                    kubectl get deployment $DEPLOYMENT_NAME \
+                      -n $NAMESPACE \
+                      -o jsonpath="{.spec.replicas}{' replicas, maxUnavailable='}{.spec.strategy.rollingUpdate.maxUnavailable}{', maxSurge='}{.spec.strategy.rollingUpdate.maxSurge}"
 
                     echo ""
                 '''
@@ -125,6 +137,9 @@ pipeline {
                 echo "Deployment:"
                 kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide
 
+                echo "ReplicaSets:"
+                kubectl get rs -n $NAMESPACE -l app=$DEPLOYMENT_NAME -o wide
+
                 echo "Pods:"
                 kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME -o wide
 
@@ -135,7 +150,10 @@ pipeline {
 
         failure {
             sh '''
-                echo "Build or rollout failed. Collect diagnostics before rollback..."
+                echo "Build or rollout failed."
+                echo "No automatic rollback."
+                echo "Failed pods are kept for debugging."
+                echo "Next build will set a new image and replace the failed rollout."
 
                 echo "Deployment:"
                 kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide || true
@@ -152,14 +170,21 @@ pipeline {
                 echo "Describe pods:"
                 kubectl describe pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME || true
 
+                echo "Current container logs:"
+                kubectl logs -n $NAMESPACE -l app=$DEPLOYMENT_NAME \
+                  --all-containers=true \
+                  --tail=200 || true
+
+                echo "Previous crashed container logs:"
+                kubectl logs -n $NAMESPACE -l app=$DEPLOYMENT_NAME \
+                  --all-containers=true \
+                  --previous \
+                  --tail=200 || true
+
                 echo "Recent events:"
                 kubectl get events -n $NAMESPACE --sort-by=.lastTimestamp || true
 
-                echo "Try rollback..."
-                kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $NAMESPACE || true
-
-                echo "After rollback:"
-                kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide || true
+                echo "Final pod state:"
                 kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME -o wide || true
             '''
         }

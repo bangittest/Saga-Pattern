@@ -9,11 +9,18 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
+      # Không cho mất pod cũ khi pod mới chưa Ready
       maxUnavailable: 0
+
+      # Cho tạo thêm 1 pod mới để test version mới
       maxSurge: 1
 
+  # Pod mới phải Ready ít nhất 10s mới được coi là ổn
   minReadySeconds: 10
+
+  # Sau 300s rollout chưa xong thì báo failed, nhưng không tự xóa pod lỗi
   progressDeadlineSeconds: 300
+
   revisionHistoryLimit: 5
 
   selector:
