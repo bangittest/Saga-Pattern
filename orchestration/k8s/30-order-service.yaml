@@ -13,7 +13,7 @@ spec:
       maxSurge: 1
 
   minReadySeconds: 10
-  progressDeadlineSeconds: 180
+  progressDeadlineSeconds: 300
   revisionHistoryLimit: 5
 
   selector:
@@ -28,7 +28,7 @@ spec:
       containers:
         - name: order-service
           image: orchestration-order-service:v1
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
 
           ports:
             - containerPort: 8081
