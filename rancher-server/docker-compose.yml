@@ -11,7 +11,7 @@ services:
 
     environment:
       CATTLE_BOOTSTRAP_PASSWORD: admin12345
-      CATTLE_SERVER_URL: https://192.168.0.100:30443
+      CATTLE_SERVER_URL: https://192.168.0.101:30443
 
     volumes:
       - rancher-data:/var/lib/rancher
@@ -61,10 +61,10 @@ services:
         EOF
 
         echo "Configure 192.168.0.100:5000 for containerd..."
-        docker exec -i desktop-control-plane sh -c 'mkdir -p /etc/containerd/certs.d/192.168.0.100:5000 && cat > /etc/containerd/certs.d/192.168.0.100:5000/hosts.toml' <<'EOF'
-        server = "http://192.168.0.100:5000"
+        docker exec -i desktop-control-plane sh -c 'mkdir -p /etc/containerd/certs.d/192.168.0.101:5000 && cat > /etc/containerd/certs.d/192.168.0.100:5000/hosts.toml' <<'EOF'
+        server = "http://192.168.0.101:5000"
 
-        [host."http://192.168.0.100:5000"]
+        [host."http://192.168.0.101:5000"]
           capabilities = ["pull", "resolve", "push"]
           skip_verify = true
         EOF

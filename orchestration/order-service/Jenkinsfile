@@ -93,37 +93,58 @@ pipeline {
             }
         }
     }
-
     post {
         success {
             sh '''
                 echo "Pipeline success."
                 echo "Image was built, pushed, and Kubernetes deployment was triggered."
-
-                echo "Current deployment:"
-                kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide || true
-
-                echo "Current pods:"
-                kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME -o wide || true
-
-                echo "Recent rollout history:"
-                kubectl rollout history deployment/$DEPLOYMENT_NAME -n $NAMESPACE || true
             '''
         }
 
         failure {
             sh '''
-                echo "Pipeline failed before completing build/push/deployment trigger."
+                echo "Pipeline failed."
+                echo "Stop immediately. Skip Kubernetes diagnostics in post action."
+            '''
+        }
 
-                echo "Deployment:"
-                kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide || true
-
-                echo "Pods:"
-                kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME -o wide || true
-
-                echo "Recent events:"
-                kubectl get events -n $NAMESPACE --sort-by=.lastTimestamp || true
+        aborted {
+            sh '''
+                echo "Pipeline aborted."
             '''
         }
     }
+
+//     post {
+//         success {
+//             sh '''
+//                 echo "Pipeline success."
+//                 echo "Image was built, pushed, and Kubernetes deployment was triggered."
+//
+//                 echo "Current deployment:"
+//                 kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide || true
+//
+//                 echo "Current pods:"
+//                 kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME -o wide || true
+//
+//                 echo "Recent rollout history:"
+//                 kubectl rollout history deployment/$DEPLOYMENT_NAME -n $NAMESPACE || true
+//             '''
+//         }
+//
+//         failure {
+//             sh '''
+//                 echo "Pipeline failed before completing build/push/deployment trigger."
+//
+//                 echo "Deployment:"
+//                 kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o wide || true
+//
+//                 echo "Pods:"
+//                 kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME -o wide || true
+//
+//                 echo "Recent events:"
+//                 kubectl get events -n $NAMESPACE --sort-by=.lastTimestamp || true
+//             '''
+//         }
+//     }
 }
