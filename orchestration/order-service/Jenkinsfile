@@ -4,7 +4,7 @@ pipeline {
     environment {
         SERVICE_DIR = "orchestration/order-service"
 
-        REGISTRY = "192.168.0.101:5000"
+        REGISTRY = "192.168.0.101:30500"
         IMAGE_NAME = "orchestration-order-service"
 
         NAMESPACE = "saga"
